@@ -1,0 +1,203 @@
+#include <Arduino.h>
+#include <stdio.h>
+
+#include "hqc-128/api.h"
+#include "hqc-128/parameters.h"
+
+int WORD_NUMBER = 1;  // Impostiamo un valore arbitrario per test simili
+
+const uint8_t parole_in_array[1][10] = {
+    //10 step
+    { 8, 103, 116, 100, 118, 111, 111, 112, 114 }, // gtdvoopr
+    /*
+    { 98, 101, 109, 99, 100, 122 }, // bemcdz
+    { 100, 102, 98, 118, 115 }, // dfbvs
+    { 121, 98, 101, 113, 116 }, // ybeqt
+    { 117, 103, 118, 109, 100 }, // ugvmd
+    { 98, 112, 122, 103 }, // bpzg
+    { 112, 119, 111 }, // pwo
+    { 115, 110, 114, 103, 107, 103, 104, 101, 103 }, // snrgkgheg
+    { 98, 119, 116, 122, 119, 100, 122, 98, 114, 110 }, // bwtzwdzbrn
+    { 103, 107, 107, 120, 104, 110, 120 }, // gkkxhnx
+    */
+    /*
+    { 109, 101, 117, 106 }, // meuj
+    { 98, 106, 111, 110 }, // bjon
+    { 111, 103, 117, 105, 113, 113, 102 }, // oguiqqf
+    { 97, 115, 120, 112, 98, 122, 115, 102, 100 }, // asxpbzsfd
+    { 116, 110, 112, 118, 108, 108, 105 }, // tnpvlli
+    //
+    { 108, 115, 99, 117, 103, 122, 120, 109, 120 }, // lscugzxmx
+    { 118, 114, 118, 113, 108, 119, 99 }, // vrvqlwc
+    { 120, 102, 116, 122, 109, 119, 114, 108, 97 }, // xftzmwrla
+    { 106, 103, 108, 118, 120, 97, 120, 98 }, // jglvxaxb
+    { 105, 116, 122, 105, 102, 105, 116 }, // itzifit
+    //
+    { 122, 104, 121, 111 }, // zhyo
+    { 122, 99, 103, 108, 103, 109, 120, 110, 106, 104 }, // zcglgmxnjh
+    { 108, 103, 97, 110, 115, 105 }, // lgansi
+    { 119, 117, 106, 103 }, // wujg
+    { 117, 97, 113, 109, 106, 117, 100, 108, 116, 103 }, // uaqmjudltg
+    //
+    { 122, 111, 107, 120, 99, 99, 99, 102 }, // zokxcccf
+    { 112, 104, 100 }, // phd
+    { 100, 111, 107, 97, 103, 113, 114 }, // dokagqr
+    { 97, 103, 108, 100, 121, 104 }, // agldyh
+    { 119, 122, 110, 120, 97, 99, 97, 121, 99 }, // wznxacayc
+    { 119, 99, 105, 113, 117, 100, 101, 107, 98, 109 }, // wciqudekbm
+    { 111, 117, 110, 100, 117 }, // oundu
+    { 122, 108, 114, 111 }, // zlro
+    { 116, 105, 98, 115 }, // tibs
+    { 109, 98, 108, 111, 117, 121, 97, 120, 118 }, // mblouyaxv
+    { 109, 109, 104, 111, 97, 108, 114, 98, 97, 98 }, // mmhoalrbab
+    { 111, 97, 103, 106, 101, 102, 99, 106, 114 }, // oagjefcjr
+    { 99, 119, 117, 100 }, // cwud
+    { 103, 110, 120, 105, 119, 99, 121, 115, 118, 120 }, // gnxiwcysvx
+    { 120, 102, 101, 98, 98 }, // xfebb
+    { 121, 111, 113, 103, 114, 114, 117, 101, 109 }, // yoqgrruem
+    { 116, 119, 112, 114, 113 }, // twprq
+    { 97, 98, 108, 102, 121, 107, 119, 122, 115 }, // ablfykwzs
+    { 119, 99, 99, 97, 109 }, // wccam
+    { 99, 104, 99, 110, 107 }, // chcnk
+    { 121, 109, 101 }, // yme
+    { 120, 100, 109, 104 }, // xdmh
+    { 114, 102, 99, 121, 108 }, // rfcyl
+    { 98, 104, 112 }, // bhp
+    { 117, 98, 117, 122, 100, 98, 112, 103, 98, 107 }, // ubuzdbpgbk
+    */
+};
+
+unsigned char pk[PUBLIC_KEY_BYTES];
+unsigned char sk[SECRET_KEY_BYTES];
+unsigned char ct[CIPHERTEXT_BYTES];
+unsigned char key1[SHARED_SECRET_BYTES];
+unsigned char key2[SHARED_SECRET_BYTES];
+
+unsigned char k1;
+unsigned char k2;
+
+// Variabile per scegliere se calcolare tempo o cicli di clock
+bool calcolaTempo = true;  // Imposta a 'true' per calcolare il tempo, 'false' per cicli di clock
+
+// Variabili per i cicli di clock
+uint32_t CLOCK1, CLOCK2;
+uint32_t CLOCK_kp = 0, CLOCK_enc = 0, CLOCK_dec = 0;
+
+// Variabili per il tempo (microsecondi)
+unsigned long startTime;
+unsigned long endTime;
+unsigned long elapsedTime_kp = 0, elapsedTime_enc = 0, elapsedTime_dec = 0;
+
+void setup() {
+  // put your setup code here, to run once:
+  Serial.begin(9600);
+  Serial.println("----- START HQC ------");
+
+    for (int i = 0; i < WORD_NUMBER; i++)
+    {
+        if (i < WORD_NUMBER) { // Assicurati di non superare la dimensione dell'array
+            memcpy(ct, parole_in_array[i], sizeof(parole_in_array[i]));
+        }
+
+
+        // Misurazione del tempo
+        startTime = micros();
+        crypto_kem_keypair(pk, sk);
+        endTime = micros();
+
+        elapsedTime_kp += (endTime - startTime);
+
+        startTime = micros();
+        k1 = crypto_kem_enc(ct, key1, pk);
+        endTime = micros();
+
+        elapsedTime_enc += (endTime - startTime);
+
+        startTime = micros();
+        k2 = crypto_kem_dec(key2, ct, sk);
+        endTime = micros();
+
+        elapsedTime_dec += (endTime - startTime);
+    }
+
+/*
+    // Misurazione dei cicli di CPU
+    for (int i = 0; i < WORD_NUMBER; i++)
+    {
+
+        if (i < WORD_NUMBER) { // Assicurati di non superare la dimensione dell'array
+            memcpy(ct, parole_in_array[i], sizeof(parole_in_array[i]));
+        }
+
+
+        CLOCK1 = ESP.getCycleCount();
+        crypto_kem_keypair(pk, sk);
+        CLOCK2 = ESP.getCycleCount();
+
+        CLOCK_kp += (CLOCK2 - CLOCK1);
+
+        CLOCK1 = ESP.getCycleCount();
+
+        CLOCK2 = ESP.getCycleCount();
+
+        CLOCK_enc += (CLOCK2 - CLOCK1);
+
+        CLOCK1 = ESP.getCycleCount();
+
+        CLOCK2 = ESP.getCycleCount();
+
+        CLOCK_dec += (CLOCK2 - CLOCK1);
+    }
+    */
+
+    // Stampa dei risultati
+
+    Serial.println("Averages:");
+/*
+    Serial.print("Cycle Count key_pair: ");
+    Serial.println(CLOCK_kp / WORD_NUMBER);
+    Serial.print("Cycle Count enc: ");
+    Serial.println(CLOCK_enc / WORD_NUMBER);
+    Serial.print("Cycle Count dec: ");
+    Serial.println(CLOCK_dec / WORD_NUMBER);
+*/
+    Serial.print("Time key_pair: ");
+    Serial.print(elapsedTime_kp / WORD_NUMBER);
+    Serial.println("µs");
+
+    Serial.print("Time enc: ");
+    Serial.print(elapsedTime_enc / WORD_NUMBER);
+    Serial.println("µs");
+
+    Serial.print("Time dec: ");
+    Serial.print(elapsedTime_dec / WORD_NUMBER);
+    Serial.println("µs");
+
+    Serial.println("Total:");
+    /*
+    Serial.print("Cycle Count key_pair: ");
+    Serial.println(CLOCK_kp );
+    Serial.print("Cycle Count enc: ");
+    Serial.println(CLOCK_enc );
+    Serial.print("Cycle Count dec: ");
+    Serial.println(CLOCK_dec );
+    */
+    Serial.print("Time key_pair: ");
+    Serial.print(elapsedTime_kp);
+    Serial.println("µs");
+
+    Serial.print("Time enc: ");
+    Serial.print(elapsedTime_enc);
+    Serial.println("µs");
+
+    Serial.print("Time dec: ");
+    Serial.print(elapsedTime_dec);
+    Serial.println("µs");
+
+    Serial.println("----- END HQC ------");
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+}
+
